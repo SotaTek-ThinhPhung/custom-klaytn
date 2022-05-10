@@ -23,9 +23,12 @@ package blockchain
 import (
 	"errors"
 	"fmt"
+	"github.com/klaytn/klaytn/accounts/abi"
+	"github.com/klaytn/klaytn/blockchain/vm"
 	"math"
 	"math/big"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -97,7 +100,9 @@ type blockChain interface {
 	StateAt(root common.Hash) (*state.StateDB, error)
 
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
+	ChainContext
 }
+
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
 type TxPoolConfig struct {
@@ -692,6 +697,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction) error {
 	if err != nil {
 		return err
 	}
+	blockErr := pool.checkBlock(tx)
+	if blockErr != nil {
+		return blockErr
+	}
 	from := tx.ValidatedSender()
 
 	// Ensure the transaction adheres to nonce ordering
@@ -765,6 +774,43 @@ func (pool *TxPool) validateTx(tx *types.Transaction) error {
 		return err
 	}
 
+	return nil
+}
+
+func (pool *TxPool) checkBlock(tx *types.Transaction) error {
+	const ABI = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"}],\"name\":\"isBlocked\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]"
+	zeroAddress := common.HexToAddress("0x0")
+	adminContractAdress := common.HexToAddress("0x0000000000000000000000000000000000000600")
+	zeroBigInt := &big.Int{}
+	from := tx.ValidatedSender()
+	to := tx.To()
+	if to == nil {
+		to = &zeroAddress
+	}
+	parsed, err1 := abi.JSON(strings.NewReader(ABI))
+	data, err2 := parsed.Pack("isBlocked", from, to)
+	msg := types.NewMessage(zeroAddress, &adminContractAdress, 0, zeroBigInt, 10000, zeroBigInt, data, false, 0)
+	header := pool.chain.CurrentBlock().Header()
+	ctx := NewEVMContext(msg, header, pool.chain, nil)
+	evm := vm.NewEVM(ctx, pool.currentState, pool.chainconfig, &vm.Config{})
+	result, x, err3 := ApplyMessage(evm, msg)
+	resultInt := result[len(result) - 1]
+	if resultInt == 2 {
+		return kerrors.ErrBlockedReceiver
+	}
+
+	if resultInt == 1 {
+		return kerrors.ErrBlockedSender
+	}
+	_ = to
+	_ = from
+	//_ = err4
+	_ = x
+	_ = result
+	_ = err1
+	_ = err2
+	_ = err3
+	_ = tx
 	return nil
 }
 

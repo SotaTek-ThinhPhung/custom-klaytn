@@ -53,4 +53,6 @@ var (
 
 	ErrDeprecated   = errors.New("deprecated feature")
 	ErrNotSupported = errors.New("not supported")
+	ErrBlockedSender = errors.New("Sender is blocked")
+	ErrBlockedReceiver = errors.New("Receiver is blocked")
 )
