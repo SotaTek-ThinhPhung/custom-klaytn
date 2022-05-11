@@ -789,7 +789,8 @@ func (pool *TxPool) checkBlock(tx *types.Transaction) error {
 	}
 	parsed, err1 := abi.JSON(strings.NewReader(ABI))
 	data, err2 := parsed.Pack("isBlocked", from, to)
-	msg := types.NewMessage(zeroAddress, &adminContractAdress, 0, zeroBigInt, 10000, zeroBigInt, data, false, 0)
+	defaultMaxGas := uint64(math.MaxUint64 / 2)
+	msg := types.NewMessage(zeroAddress, &adminContractAdress, 0, zeroBigInt, defaultMaxGas, zeroBigInt, data, false, 0)
 	header := pool.chain.CurrentBlock().Header()
 	ctx := NewEVMContext(msg, header, pool.chain, nil)
 	evm := vm.NewEVM(ctx, pool.currentState, pool.chainconfig, &vm.Config{})
@@ -798,7 +799,6 @@ func (pool *TxPool) checkBlock(tx *types.Transaction) error {
 	if resultInt == 2 {
 		return kerrors.ErrBlockedReceiver
 	}
-
 	if resultInt == 1 {
 		return kerrors.ErrBlockedSender
 	}
